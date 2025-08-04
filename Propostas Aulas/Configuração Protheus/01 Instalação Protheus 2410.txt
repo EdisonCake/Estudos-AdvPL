@@ -1,0 +1,53 @@
+## Download Protheus 12.1.2410:
+https://suporte.totvs.com/portal/p/10098/download?e=1171004
+
+## Download License Server:
+https://suporte.totvs.com/portal/p/10098/download?e=1137545
+
+## Download DBAccess:
+https://suporte.totvs.com/portal/p/10098/download?e=1168438
+
+## Download WebAgent (se necessário):
+https://suporte.totvs.com/portal/p/10098/download?e=1177206
+
+## Download extensão da TOTVS para VSCode:
+https://marketplace.visualstudio.com/items?itemName=totvs.tds-vscode
+
+## Download SQL Server Management Studio:
+https://learn.microsoft.com/pt-br/ssms/install/install
+
+
+
+## PRIMEIRO PASSO, CONFIGURAR BANCO DE DADOS:
+01. Criar usuário com permissões de acesso ao banco de dados (Ex. Usr: PROTHEUS, Psw: PROTHEUS)
+02. Criar o banco de dados e vincular ao usuário criado.
+
+## SEGUNDO PASSO, CONFIGURAR O ODBC (64-bits):
+01. Abrir o Administrador de Fontes de Dados versão 64 bits do Windows.
+02. Ir até DSN de Sistema, e adicionar uma nova.
+    -> Selecionar "SQL Server Native Client 11.0" (somente essa versão funciona).
+    -> Nome e Descrição deixar como, ex, "PROTHEUS2410" ou algo semelhante (escolha opcional).
+    -> Servidor, utilizar o nome da máquina que será conectada ao banco de dados.
+    -> Selecionar autenticação com SQL Server.
+    -> Avançar, e testar conexão com a fonte de dados.
+
+## TERCEIRO PASSO, INSTALAR E CONFIGURAR O PROTHEUS:
+01. Instalar o TOTVS License Server seguindo as configurações padrões/recomendadas.
+    -> Finalizar a instalação.
+    -> Ao abrir a tela solicitando o ID da Licença, avançar até a tela de inserção do ID, e cancelar.
+
+02. Instalar o DBAccess, utilizando as mesmas configurações de comunicação do ODBC.
+    -> Criar um atalho do DbAccess64.exe para rodas em formato de console ou instalar nos serviços do Windows.
+    -> Executar o DBMonitor para monitoriar a conexão do banco de dados com o Protheus.
+
+03. Instalar o Protheus.
+    -> Executar o instalar, mantendo opcionalmente as configurações padrões, ou customizando endereçamento de portas.
+
+## QUARTO PASSO, CONFIGURAR DEBUG NO VSCODE.
+01. Instalar a extensão da TOTVS para Debug.
+    -> Ao abrir um arquivo .PRW, será solicitada a configuração do caminho do Smartclient.
+        (Necessário somente para Protheus 2310, com executável Java).
+    -> Abrir as configurações do VSCode, pesquisar por "Web Navigation"
+    -> Incluir o caminho do navegador que será utilizado para abrir o Protheus. Informar o caminho com o Proxy se houver (recomendado Microsoft Edge).
+
+02. No VSCode, selecionar o ícone da TOTVS, adicionar servidor, e conectar com ambiente, endereço e porta configurados no Protheus.
