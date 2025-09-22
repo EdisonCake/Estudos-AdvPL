@@ -1,6 +1,7 @@
 #INCLUDE 'TOTVS.CH'
 #INCLUDE 'FWMVCDEF.CH'
 #INCLUDE 'TBICONN.CH'
+#INCLUDE 'TOPCONN.CH'
 
 /*/{Protheus.doc} PROFREAD
     Rotina para leitura de arquivos de LOG do Protheus.
@@ -108,26 +109,35 @@ User Function FileLine(cContent)
 Return
 
 User Function ShowCont()
+
+    Local oDlgPrinc
+
     Local oBrowseUp  
+    Local oPanelUp
+    Local oTemp1
+    Local cAlias1 := "TMP_CALL"
+    Local aItens    := {}
+    Local aColunas1  := {}
+
     Local oBrowseDown 
-    Local oDialog
+    Local oPanelDown
+    Local oTemp2
+    Local cAlias2   := "TMP_FROM"
+    Local aItens2   := {}
+    Local aColunas2  := {}
+
+    Local oTela
+    Local oRelation
+    Local aRelation := {}
+
+    Local cIdCall := ""
+    Local cIdFrom := ""
 
     Local nBloco    := 0
     Local nLinha    := 0
-    Local nTotal    := 0
     Local nCount    := 0
     Local aBloco    := {}
     Local aReg      := {}
-    Local aItens    := {}
-    Local aItens2   := {}
-    Local aColunas  := {}
-    
-    oDialog := TDialog():New(0, 0, 1920, 1080,,,,,,,,,,.T.)
-    oBrowseUp := FwBrowse():New(oDialog)
-    oBrowseUp:SetDataArrayoBrowse()
-
-    nTotal := len(aConteudo)
-    ProcRegua(nTotal)
 
     // Percorre o array de conteúdo
     For nBloco := 1 To Len(aConteudo)
@@ -139,141 +149,113 @@ User Function ShowCont()
             If aReg[2] == "CALL"
                 aAdd(aItens, {nBloco, aReg[3], aReg[4], Val(aReg[6]), aReg[7], aReg[8]})
 
+            // Apenas registros do tipo "FROM"
             Elseif aReg[2] == "FROM"
-                aAdd(aItens2, {nBloco, aReg[3], aReg[4], Val(Reg[5]), aReg[6], aReg[7], aReg[8]})
+                aAdd(aItens2, {nBloco, aReg[3], aReg[4], aReg[5], aReg[6], aReg[7], aReg[8]})
                 
             EndIf
-            
-
-            IncProc()
         Next
     Next
 
-    oBrowseUp:SetArray(aItens)
+    // Criação das tabelas temporárias para popular com as informações
+    oTemp1 := FWTemporaryTable():New(cAlias1)
+    oTemp2 := FWTemporaryTable():New(cAlias2)
 
-    aAdd(aColunas, {;
-                        "Bloco",;                           // [n][01] Título da coluna
-                        {|oBrw| aItens[oBrw:At(), 1]},;     // [n][02] Code-Block de carga dos dados
-                        "N",;                               // [n][03] Tipo de dados
-                        "@E 9999999999",;                   // [n][04] Máscara
-                        1,;                                 // [n][05] Alinhamento (0=Centralizado, 1=Esquerda ou 2=Direita)
-                        10,;                                // [n][06] Tamanho
-                        0,;                                 // [n][07] Decimal
-                        .F.,;                               // [n][08] Indica se permite a edição
-                        {|| },;                             // [n][09] Code-Block de validação da coluna após a edição
-                        .F.,;                               // [n][10] Indica se exibe imagem
-                        Nil,;                               // [n][11] Code-Block de execução do duplo clique
-                        "__ReadVar",;                       // [n][12] Variável a ser utilizada na edição (ReadVar)
-                        {|| AlwaysTrue()},;                 // [n][13] Code-Block de execução do clique no header
-                        .F.,;                               // [n][14] Indica se a coluna está deletada
-                        .F.,;                               // [n][15] Indica se a coluna será exibida nos detalhes do Browse
-                        {},;                                // [n][16] Opções de carga dos dados
-                        "ID1"})                             // [n][17] Id da coluna
+    aColunas1 := {}
+    aAdd(aColunas1, {"CALL_BLOCO",   "C", 10, 0})
+    aAdd(aColunas1, {"FUNCAO",  "C", 20, 0})
+    aAdd(aColunas1, {"FONTE",   "C", 20, 0})
+    aAdd(aColunas1, {"QTDCHAM", "N", 10, 0})
+    aAdd(aColunas1, {"TEMPTOT", "C", 20, 0})
+    aAdd(aColunas1, {"TEMPMAX", "C", 20, 0})
 
-    aAdd(aColunas, {;
-                        "Função",;                          // [n][01]
-                        {|oBrw| aItens[oBrw:At(), 2]},;     // [n][02]
-                        "N",;                               // [n][03]
-                        "@!",;                              // [n][04]
-                        1,;                                 // [n][05]
-                        20,;                                // [n][06]
-                        0,;                                 // [n][07]
-                        .F.,;                               // [n][08]
-                        {|| },;                             // [n][09]
-                        .F.,;                               // [n][10]
-                        Nil,;                               // [n][11]
-                        "__ReadVar",;                       // [n][12]
-                        {|| AlwaysTrue()},;                 // [n][13]
-                        .F.,;                               // [n][14]
-                        .F.,;                               // [n][15]
-                        {},;                                // [n][16]
-                        "ID2"})                             // [n][17]
+    aColunas2 := {}
+    aAdd(aColunas2, {"FROM_BLOCO",   "C", 10, 0})
+    aAdd(aColunas2, {"FUNCAO",  "C", 20, 0})
+    aAdd(aColunas2, {"FONTE",   "C", 20, 0})
+    aAdd(aColunas2, {"LINHA",   "N", 10, 0})
+    aAdd(aColunas2, {"QTDCHAM", "C", 10, 0})
+    aAdd(aColunas2, {"TEMPTOT", "C", 20, 0})
+    aAdd(aColunas2, {"TEMPMAX", "C", 20, 0})
 
-    aAdd(aColunas, {;
-                        "Fonte",;                           // [n][01]
-                        {|oBrw| aItens[oBrw:At(), 3]},;     // [n][02]
-                        "N",;                               // [n][03]
-                        "@!",;                              // [n][04]
-                        1,;                                 // [n][05]
-                        20,;                                // [n][06]
-                        0,;                                 // [n][07]
-                        .F.,;                               // [n][08]
-                        {|| },;                             // [n][09]
-                        .F.,;                               // [n][10]
-                        Nil,;                               // [n][11]
-                        "__ReadVar",;                       // [n][12]
-                        {|| AlwaysTrue()},;                 // [n][13]
-                        .F.,;                               // [n][14]
-                        .F.,;                               // [n][15]
-                        {},;                                // [n][16]
-                        "ID3"})                             // [n][17]
+    oTemp1:SetFields(aColunas1)
+    oTemp1:AddIndex("1", {"CALL_BLOCO"})
+    oTemp2:SetFields(aColunas2)
+    oTemp2:AddIndex("1", {"FROM_BLOCO"})
+    oTemp1:Create()
+    oTemp2:Create()
 
-    aAdd(aColunas, {;
-                        "Qtd. Chamadas",;                   // [n][01]
-                        {|oBrw| aItens[oBrw:At(), 4]},;     // [n][02]
-                        "N",;                               // [n][03]
-                        "",;                                // [n][04]
-                        1,;                                 // [n][05]
-                        10,;                                // [n][06]
-                        0,;                                 // [n][07]
-                        .F.,;                               // [n][08]
-                        {|| },;                             // [n][09]
-                        .F.,;                               // [n][10]
-                        Nil,;                               // [n][11]
-                        "__ReadVar",;                       // [n][12]
-                        {|| AlwaysTrue()},;                 // [n][13]
-                        .F.,;                               // [n][14]
-                        .F.,;                               // [n][15]
-                        {},;                                // [n][16]
-                        "ID4"})                             // [n][17]
+    dbSelectArea(cAlias1)
+    (cAlias1)->(dbGoTop())
+    For nCount := 1 to 10
 
-    aAdd(aColunas, {;
-                        "Tempo Total",;                     // [n][01]
-                        {|oBrw| aItens[oBrw:At(), 5]},;     // [n][02]
-                        "N",;                               // [n][03]
-                        "",;                                // [n][04]
-                        1,;                                 // [n][05]
-                        20,;                                // [n][06]
-                        0,;                                 // [n][07]
-                        .F.,;                               // [n][08]
-                        {|| },;                             // [n][09]
-                        .F.,;                               // [n][10]
-                        Nil,;                               // [n][11]
-                        "__ReadVar",;                       // [n][12]
-                        {|| AlwaysTrue()},;                 // [n][13]
-                        .F.,;                               // [n][14]
-                        .F.,;                               // [n][15]
-                        {},;                                // [n][16]
-                        "ID5"})                             // [n][17]
+        If Reclock(cAlias1, .T.)
 
-    aAdd(aColunas, {;
-                        "Tempo Máximo",;                    // [n][01]
-                        {|oBrw| aItens[oBrw:At(), 6]},;     // [n][02]
-                        "N",;                               // [n][03]
-                        "",;                                // [n][04]
-                        1,;                                 // [n][05]
-                        20,;                                // [n][06]
-                        0,;                                 // [n][07]
-                        .F.,;                               // [n][08]
-                        {|| },;                             // [n][09]
-                        .F.,;                               // [n][10]
-                        Nil,;                               // [n][11]
-                        "__ReadVar",;                       // [n][12]
-                        {|| AlwaysTrue()},;                 // [n][13]
-                        .F.,;                               // [n][14]
-                        .F.,;                               // [n][15]
-                        {},;                                // [n][16]
-                        "ID6"})                             // [n][17]
+            (cAlias1)->CALL_BLOCO    := CVALTOCHAR(aItens[nCount][1])
+            (cAlias1)->FUNCAO   := aItens[nCount][2]
+            (cAlias1)->FONTE    := aItens[nCount][3]
+            (cAlias1)->QTDCHAM  := aItens[nCount][4]
+            (cAlias1)->TEMPTOT  := aItens[nCount][5]
+            (cAlias1)->TEMPMAX  := aItens[nCount][6]
+            (cAlias1)->(msUnlock())
 
+            (cAlias1)->(dbSkip())
+        Endif
+    Next nCount
 
-    For nCount := 1 to len(aColunas)
-        oBrowseUp:AddColumn(aColunas[nCount])
-    Next
+    dbSelectArea(cAlias2)
+    (cAlias2)->(dbGoTop())
+    For nCount := 1 to 10
+        If Reclock(cAlias2, .T.)
 
-    oBrowseUp:SetOwner(oDialog)
-    oBrowseUp:SetDescription("LogProfiler Reader - ADVPL Version")
+            (cAlias2)->FROM_BLOCO    := CVALTOCHAR(aItens2[nCount][1])
+            (cAlias2)->FUNCAO   := aItens2[nCount][2]
+            (cAlias2)->FONTE    := aItens2[nCount][3]
+            (cAlias2)->LINHA    := aItens2[nCount][4]
+            (cAlias2)->QTDCHAM  := aItens2[nCount][5]
+            (cAlias2)->TEMPTOT  := aItens2[nCount][6]
+            (cAlias2)->TEMPMAX  := aItens2[nCount][7]
+            (cAlias2)->(msUnlock())
+
+            (cAlias2)->(dbSkip())
+        Endif
+    Next nCount
+
+    DEFINE MSDIALOG oDlgPrinc TITLE "LogProfiler Reader (ADVPL)" FROM 000, 000 TO 1920, 1080 OF oMainWnd PIXEL 
+
+    oTela := FwFormContainer():New(oDlgPrinc)
+    cIdCall := oTela:CreateHorizontalBox(40)
+    cIdFrom := oTela:CreateHorizontalBox(60)
+    oTela:Activate(oDlgPrinc, .F.)
+
+    oPanelUp    := oTela:GetPanel(cIdCall)
+    oPanelDown  := oTela:GetPanel(cIdFrom)
+
+    oBrowseUp := FWmBrowse():New()
+    oBrowseUp:SetOwner(oPanelUp)
+    oBrowseUp:SetDescription("Funções Chamadas")
+    oBrowseUp:SetAlias(cAlias1)
+    oBrowseUp:DisableDetails()
+    oBrowseUp:SetProfileID("1")
     oBrowseUp:Activate()
-    oDialog:Activate()
+
+    oBrowseDown := FWmBrowse():New
+    oBrowseDown:SetOwner(oPanelDown)
+    oBrowseDown:SetDescription("Chamadores")
+    oBrowseDown:SetAlias(cAlias2)
+    oBrowseDown:DisableDetails()
+    oBrowseDown:SetProfileID("2")
+
+    oRelation := FWBrwRelation():New()
+    oRelation:AddRelation(oBrowseUp, oBrowseDown, {{'CALL_BLOCO', 'FROM_BLOCO'}})
+    oRelation:Activate()
+    oBrowseDown:Activate()
+
+    oBrowseUp:Refresh()
+    oBrowseDown:Refresh()
+
+    ACTIVATE MSDIALOG oDlgPrinc CENTER
+
 Return
 
 Static Function ParseCall(cLine)
@@ -346,173 +328,3 @@ Static Function ParseFrom(cLine)
     EndIf
 
 Return {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMaiorTempo}
-
-/* Backup 
-    User Function ShowCont()
-        Local oBrowse   
-        Local oDialog
-
-        Local nBloco    := 0
-        Local nLinha    := 0
-        Local nTotal    := 0
-        Local nCount    := 0
-        Local aBloco    := {}
-        Local aReg      := {}
-        Local aItens    := {}
-        Local aItens2   := {}
-        Local aColunas  := {}
-
-        oDialog := TDialog():New(0, 0, 1920, 1080,,,,,,,,,,.T.)
-        oBrowse := FwBrowse():New(oDialog)
-        oBrowse:SetDataArrayoBrowse()
-
-        nTotal := len(aConteudo)
-        ProcRegua(nTotal)
-
-        // Percorre o array de conteúdo
-        For nBloco := 1 To Len(aConteudo)
-            aBloco := aConteudo[nBloco]
-            For nLinha := 1 To Len(aBloco)
-                aReg := aBloco[nLinha]
-
-                // Apenas registros do tipo "CALL"
-                If aReg[2] == "CALL"
-                    aAdd(aItens, {nBloco, aReg[3], aReg[4], Val(aReg[6]), aReg[7], aReg[8]})
-
-                Elseif aReg[2] == "FROM"
-                    aAdd(aItens2, {nBloco, aReg[3], aReg[4], Val(Reg[5]), aReg[6], aReg[7], aReg[8]})
-
-                EndIf
-
-
-                IncProc()
-            Next
-        Next
-
-        oBrowse:SetArray(aItens)
-
-        aAdd(aColunas, {;
-                            "Bloco",;                           // [n][01] Título da coluna
-                            {|oBrw| aItens[oBrw:At(), 1]},;     // [n][02] Code-Block de carga dos dados
-                            "N",;                               // [n][03] Tipo de dados
-                            "@E 9999999999",;                   // [n][04] Máscara
-                            1,;                                 // [n][05] Alinhamento (0=Centralizado, 1=Esquerda ou 2=Direita)
-                            10,;                                // [n][06] Tamanho
-                            0,;                                 // [n][07] Decimal
-                            .F.,;                               // [n][08] Indica se permite a edição
-                            {|| },;                             // [n][09] Code-Block de validação da coluna após a edição
-                            .F.,;                               // [n][10] Indica se exibe imagem
-                            Nil,;                               // [n][11] Code-Block de execução do duplo clique
-                            "__ReadVar",;                       // [n][12] Variável a ser utilizada na edição (ReadVar)
-                            {|| AlwaysTrue()},;                 // [n][13] Code-Block de execução do clique no header
-                            .F.,;                               // [n][14] Indica se a coluna está deletada
-                            .F.,;                               // [n][15] Indica se a coluna será exibida nos detalhes do Browse
-                            {},;                                // [n][16] Opções de carga dos dados
-                            "ID1"})                             // [n][17] Id da coluna
-
-        aAdd(aColunas, {;
-                            "Função",;                          // [n][01]
-                            {|oBrw| aItens[oBrw:At(), 2]},;     // [n][02]
-                            "N",;                               // [n][03]
-                            "@!",;                              // [n][04]
-                            1,;                                 // [n][05]
-                            20,;                                // [n][06]
-                            0,;                                 // [n][07]
-                            .F.,;                               // [n][08]
-                            {|| },;                             // [n][09]
-                            .F.,;                               // [n][10]
-                            Nil,;                               // [n][11]
-                            "__ReadVar",;                       // [n][12]
-                            {|| AlwaysTrue()},;                 // [n][13]
-                            .F.,;                               // [n][14]
-                            .F.,;                               // [n][15]
-                            {},;                                // [n][16]
-                            "ID2"})                             // [n][17]
-
-        aAdd(aColunas, {;
-                            "Fonte",;                           // [n][01]
-                            {|oBrw| aItens[oBrw:At(), 3]},;     // [n][02]
-                            "N",;                               // [n][03]
-                            "@!",;                              // [n][04]
-                            1,;                                 // [n][05]
-                            20,;                                // [n][06]
-                            0,;                                 // [n][07]
-                            .F.,;                               // [n][08]
-                            {|| },;                             // [n][09]
-                            .F.,;                               // [n][10]
-                            Nil,;                               // [n][11]
-                            "__ReadVar",;                       // [n][12]
-                            {|| AlwaysTrue()},;                 // [n][13]
-                            .F.,;                               // [n][14]
-                            .F.,;                               // [n][15]
-                            {},;                                // [n][16]
-                            "ID3"})                             // [n][17]
-
-        aAdd(aColunas, {;
-                            "Qtd. Chamadas",;                   // [n][01]
-                            {|oBrw| aItens[oBrw:At(), 4]},;     // [n][02]
-                            "N",;                               // [n][03]
-                            "",;                                // [n][04]
-                            1,;                                 // [n][05]
-                            10,;                                // [n][06]
-                            0,;                                 // [n][07]
-                            .F.,;                               // [n][08]
-                            {|| },;                             // [n][09]
-                            .F.,;                               // [n][10]
-                            Nil,;                               // [n][11]
-                            "__ReadVar",;                       // [n][12]
-                            {|| AlwaysTrue()},;                 // [n][13]
-                            .F.,;                               // [n][14]
-                            .F.,;                               // [n][15]
-                            {},;                                // [n][16]
-                            "ID4"})                             // [n][17]
-
-        aAdd(aColunas, {;
-                            "Tempo Total",;                     // [n][01]
-                            {|oBrw| aItens[oBrw:At(), 5]},;     // [n][02]
-                            "N",;                               // [n][03]
-                            "",;                                // [n][04]
-                            1,;                                 // [n][05]
-                            20,;                                // [n][06]
-                            0,;                                 // [n][07]
-                            .F.,;                               // [n][08]
-                            {|| },;                             // [n][09]
-                            .F.,;                               // [n][10]
-                            Nil,;                               // [n][11]
-                            "__ReadVar",;                       // [n][12]
-                            {|| AlwaysTrue()},;                 // [n][13]
-                            .F.,;                               // [n][14]
-                            .F.,;                               // [n][15]
-                            {},;                                // [n][16]
-                            "ID5"})                             // [n][17]
-
-        aAdd(aColunas, {;
-                            "Tempo Máximo",;                    // [n][01]
-                            {|oBrw| aItens[oBrw:At(), 6]},;     // [n][02]
-                            "N",;                               // [n][03]
-                            "",;                                // [n][04]
-                            1,;                                 // [n][05]
-                            20,;                                // [n][06]
-                            0,;                                 // [n][07]
-                            .F.,;                               // [n][08]
-                            {|| },;                             // [n][09]
-                            .F.,;                               // [n][10]
-                            Nil,;                               // [n][11]
-                            "__ReadVar",;                       // [n][12]
-                            {|| AlwaysTrue()},;                 // [n][13]
-                            .F.,;                               // [n][14]
-                            .F.,;                               // [n][15]
-                            {},;                                // [n][16]
-                            "ID6"})                             // [n][17]
-
-
-        For nCount := 1 to len(aColunas)
-            oBrowse:AddColumn(aColunas[nCount])
-        Next
-
-        oBrowse:SetOwner(oDialog)
-        oBrowse:SetDescription("LogProfiler Reader - ADVPL Version")
-        oBrowse:Activate()
-        oDialog:Activate()
-    Return
-    */
