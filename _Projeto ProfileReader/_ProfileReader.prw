@@ -109,7 +109,6 @@ User Function FileLine(cContent)
 Return
 
 User Function ShowCont()
-
     Local oDlgPrinc
 
     Local oBrowseUp  
@@ -128,7 +127,6 @@ User Function ShowCont()
 
     Local oTela
     Local oRelation
-    Local aRelation := {}
 
     Local cIdCall := ""
     Local cIdFrom := ""
@@ -162,21 +160,21 @@ User Function ShowCont()
     oTemp2 := FWTemporaryTable():New(cAlias2)
 
     aColunas1 := {}
-    aAdd(aColunas1, {"CALL_BLOCO",   "C", 10, 0})
-    aAdd(aColunas1, {"FUNCAO",  "C", 20, 0})
-    aAdd(aColunas1, {"FONTE",   "C", 20, 0})
-    aAdd(aColunas1, {"QTDCHAM", "N", 10, 0})
-    aAdd(aColunas1, {"TEMPTOT", "C", 20, 0})
-    aAdd(aColunas1, {"TEMPMAX", "C", 20, 0})
+    aAdd(aColunas1, {"CALL_BLOCO",  "C", 10, 0, "@E 9999999999"})
+    aAdd(aColunas1, {"FUNCAO",      "C", 20, 0, "@!"})
+    aAdd(aColunas1, {"FONTE",       "C", 20, 0, "@!"})
+    aAdd(aColunas1, {"QTDCHAM",     "N", 10, 0, "@E 9999999999"})
+    aAdd(aColunas1, {"TEMPTOT",     "C", 20, 0, "@!"})
+    aAdd(aColunas1, {"TEMPMAX",     "C", 20, 0, "@!"})
 
     aColunas2 := {}
-    aAdd(aColunas2, {"FROM_BLOCO",   "C", 10, 0})
-    aAdd(aColunas2, {"FUNCAO",  "C", 20, 0})
-    aAdd(aColunas2, {"FONTE",   "C", 20, 0})
-    aAdd(aColunas2, {"LINHA",   "N", 10, 0})
-    aAdd(aColunas2, {"QTDCHAM", "C", 10, 0})
-    aAdd(aColunas2, {"TEMPTOT", "C", 20, 0})
-    aAdd(aColunas2, {"TEMPMAX", "C", 20, 0})
+    aAdd(aColunas2, {"FROM_BLOCO",  "C", 10, 0, "@E 9999999999"})
+    aAdd(aColunas2, {"FUNCAO",      "C", 20, 0, "@!"})
+    aAdd(aColunas2, {"FONTE",       "C", 20, 0, "@!"})
+    aAdd(aColunas2, {"LINHA",       "N", 10, 0, "@E 9999999999"})
+    aAdd(aColunas2, {"QTDCHAM",     "C", 10, 0, "@!"})
+    aAdd(aColunas2, {"TEMPTOT",     "C", 20, 0, "@!"})
+    aAdd(aColunas2, {"TEMPMAX",     "C", 20, 0, "@!"})
 
     oTemp1:SetFields(aColunas1)
     oTemp1:AddIndex("1", {"CALL_BLOCO"})
@@ -185,47 +183,11 @@ User Function ShowCont()
     oTemp1:Create()
     oTemp2:Create()
 
-    dbSelectArea(cAlias1)
-    (cAlias1)->(dbGoTop())
-    For nCount := 1 to 10
-
-        If Reclock(cAlias1, .T.)
-
-            (cAlias1)->CALL_BLOCO    := CVALTOCHAR(aItens[nCount][1])
-            (cAlias1)->FUNCAO   := aItens[nCount][2]
-            (cAlias1)->FONTE    := aItens[nCount][3]
-            (cAlias1)->QTDCHAM  := aItens[nCount][4]
-            (cAlias1)->TEMPTOT  := aItens[nCount][5]
-            (cAlias1)->TEMPMAX  := aItens[nCount][6]
-            (cAlias1)->(msUnlock())
-
-            (cAlias1)->(dbSkip())
-        Endif
-    Next nCount
-
-    dbSelectArea(cAlias2)
-    (cAlias2)->(dbGoTop())
-    For nCount := 1 to 10
-        If Reclock(cAlias2, .T.)
-
-            (cAlias2)->FROM_BLOCO    := CVALTOCHAR(aItens2[nCount][1])
-            (cAlias2)->FUNCAO   := aItens2[nCount][2]
-            (cAlias2)->FONTE    := aItens2[nCount][3]
-            (cAlias2)->LINHA    := aItens2[nCount][4]
-            (cAlias2)->QTDCHAM  := aItens2[nCount][5]
-            (cAlias2)->TEMPTOT  := aItens2[nCount][6]
-            (cAlias2)->TEMPMAX  := aItens2[nCount][7]
-            (cAlias2)->(msUnlock())
-
-            (cAlias2)->(dbSkip())
-        Endif
-    Next nCount
-
-    DEFINE MSDIALOG oDlgPrinc TITLE "LogProfiler Reader (ADVPL)" FROM 000, 000 TO 1920, 1080 OF oMainWnd PIXEL 
+    DEFINE MSDIALOG oDlgPrinc TITLE "LogProfiler Reader (ADVPL)" FROM 000, 000 TO 1920, 1080 OF oMainWnd0 PIXEL 
 
     oTela := FwFormContainer():New(oDlgPrinc)
-    cIdCall := oTela:CreateHorizontalBox(40)
-    cIdFrom := oTela:CreateHorizontalBox(60)
+    cIdCall := oTela:CreateHorizontalBox(30)
+    cIdFrom := oTela:CreateHorizontalBox(30)
     oTela:Activate(oDlgPrinc, .F.)
 
     oPanelUp    := oTela:GetPanel(cIdCall)
@@ -247,9 +209,45 @@ User Function ShowCont()
     oBrowseDown:SetProfileID("2")
 
     oRelation := FWBrwRelation():New()
-    oRelation:AddRelation(oBrowseUp, oBrowseDown, {{'CALL_BLOCO', 'FROM_BLOCO'}})
+    oRelation:AddRelation(oBrowseUp, oBrowseDown, {{'TMP_CALL->CALL_BLOCO', 'TMP_FROM->FROM_BLOCO'}})
     oRelation:Activate()
     oBrowseDown:Activate()
+
+    dbSelectArea(cAlias1)
+    (cAlias1)->(dbGoTop())
+    For nCount := 1 to 10
+
+        If Reclock(cAlias1, .T.)
+
+            (cAlias1)->CALL_BLOCO   := CVALTOCHAR(aItens[nCount][1])
+            (cAlias1)->FUNCAO       := aItens[nCount][2]
+            (cAlias1)->FONTE        := aItens[nCount][3]
+            (cAlias1)->QTDCHAM      := aItens[nCount][4]
+            (cAlias1)->TEMPTOT      := aItens[nCount][5]
+            (cAlias1)->TEMPMAX      := aItens[nCount][6]
+            (cAlias1)->(msUnlock())
+
+            (cAlias1)->(dbSkip())
+        Endif
+    Next nCount
+
+    dbSelectArea(cAlias2)
+    (cAlias2)->(dbGoTop())
+    For nCount := 1 to 10
+        If Reclock(cAlias2, .T.)
+
+            (cAlias2)->FROM_BLOCO   := CVALTOCHAR(aItens2[nCount][1])
+            (cAlias2)->FUNCAO       := aItens2[nCount][2]
+            (cAlias2)->FONTE        := aItens2[nCount][3]
+            (cAlias2)->LINHA        := aItens2[nCount][4]
+            (cAlias2)->QTDCHAM      := aItens2[nCount][5]
+            (cAlias2)->TEMPTOT      := aItens2[nCount][6]
+            (cAlias2)->TEMPMAX      := aItens2[nCount][7]
+            (cAlias2)->(msUnlock())
+
+            (cAlias2)->(dbSkip())
+        Endif
+    Next nCount
 
     oBrowseUp:Refresh()
     oBrowseDown:Refresh()
