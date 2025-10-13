@@ -4,13 +4,15 @@
 #INCLUDE 'TOPCONN.CH'
 
 /*/{Protheus.doc} PROFREAD
+
     Rotina para leitura de arquivos de LOG do Protheus.
     Tradução do LogProfileViewer em Java.
 
     @type user function
     @author Edison Cake
-    @since 10/07/2025
-    @history  Primeiro estágio, criação da view para visualização dos arquivos.
+    @since 10.07.2025
+    
+    @history 13.10.2025 - Criado vínculo entre tabelas temporárias para exibição do grid.
 */
 User Function PROFREAD()
 
@@ -32,21 +34,18 @@ User Function PROFREAD()
     EndIf
 
     If lProtheus
-        u_OPNFILE()
-        MsgRun("Preenchendo View...", "Aguarde!", {|| u_ShowCont()})
+        MsgRun("Abrindo Arquivo...",    "Aguarde!",     {|| u_OPNFILE()})
+        MsgRun("Preenchendo View...",   "Aguarde!",     {|| U_ShowCont()})
     Else
         u_OPNFILE()
-        FwAlertInfo("Atenção, criando tabelas!", "Prosseguir")
-        u_ShowCont()
+        u_blindView()
     EndIf
 
     If !Empty(oFile)
         oFile:Close()
     EndIf
-
 Return 
 
-// Abre o arquivo .log e preenche os arrays com os blocos de chamada.
 User Function OPNFILE()
 
     Local cDir      := cGetFile("*.txt", "Selecione o arquivo para leitura", 1, "", .T.)
@@ -85,17 +84,29 @@ User Function OPNFILE()
         For nLinha := 1 To Len(aBloco)
             aReg := aBloco[nLinha]
 
-            // Apenas registros do tipo "CALL"
             If aReg[2] == "CALL"
+                //? Estrutura do ParseCall: {nBloco, "CALL", cFunc, cFonte, cRest, cContCall, cTotTempo, cMaiorTempo}
+                //* aAdd(aItens, {nBlock, Funcao, Fonte, QTD_CHAM, TEMPO_CPU, MEM_ALOC})
                 aAdd(aItens, {nBlock, aReg[3], aReg[4], Val(aReg[6]), aReg[7], aReg[8]})
-
-            // Apenas registros do tipo "FROM"
+            
             Elseif aReg[2] == "FROM"
+                //? Estrutura do ParseFrom: {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMaiorTempo}
+                //* aAdd(aItens2, {nBlock, Funcao, Fonte, Linha, QTD_CHAM, TEMPO_CPU, MEM_ALOC})
                 aAdd(aItens2, {nBlock, aReg[3], aReg[4], aReg[5], aReg[6], aReg[7], aReg[8]})
                 
             EndIf
         Next
     Next
+
+Return
+
+User Function blindView()
+
+    Local oDialog := TDialog():New(000, 000, 100, 500, "Aguarde, preenchendo view...", /* Param */, /* Param */, /* Param */, /* Param */, CLR_BLACK, CLR_WHITE, /* Param */, , .T., /* Param */, /* Param */, /* Param */, 500, 100, .F.)
+
+    oDialog:Activate()
+
+    u_ShowCont()
 
 Return
 
@@ -140,61 +151,124 @@ User Function ShowCont()
 
     Local nCount        as Numeric
     Local aColunas      as Array
+    Local aColunas2     as Array
     Local aFiltro       as Array
+    Local cIdUp         as Character
+    Local cIdDown       as Character
+
     Private cAliasTemp  as Character
     Private aCampos     as Array
     Private oTempTable  as Object
     Private oBrowse     as Object
+    Private oPanelUp    as Object
     Private oDlg        as Object
+    Private oTela
     Private aRotina     := MenuDef()
+
+    Private cAliasTmp2  as Character
+    Private aCampos2    as Array
+    Private oTempDown   as Object
+    Private oBrowseDown as Object
+    Private oPanelDown  as Object
+
+    Private oRelation   as Object
+    Private aRelation   as Array
     
     aCampos     := retColumns("CALL", 1)
     aColunas    := retColumns("CALL", 2)
+    aCampos2    := retColumns("FROM", 1)
+    aColunas2   := retColumns("FROM", 2)
     aFiltro     := {}
 
-    oTempTable := FWTemporaryTable():New()
-    oTempTable:SetFields(aCampos)
-    oTempTable:AddIndex("Bloco", {"Bloco", "Funcao"})
-    oTempTable:Create()
+    DEFINE MSDIALOG oDlg TITLE "LogProfiler Reader (AdvPL)" FROM 000, 000 TO 800, 1750 OF oMainWnd PIXEL
+        oTela   := FwFormContainer():New(oDlg)
+        cIdUp   := oTela:CreateHorizontalBox(50)
+        cIdDown := oTela:CreateHorizontalBox(50)
+        oTela:Activate(oDlg, .F.)
 
-    cAliasTemp := oTempTable:GetAlias()
-    oBrowse := NIL
+        oPanelUp    := oTela:Getpanel(cIdUp)
+        oPanelDown  := oTela:Getpanel(cIdDown)
 
-    DbSelectArea(cAliasTemp)
-    For nCount := 01  to len(aItens)
-        If (RecLock(cAliasTemp, .T.))
-            (cAliasTemp)->Bloco     := aItens[nCount][1]
-            (cAliasTemp)->Funcao    := aItens[nCount][2]
-            (cAliasTemp)->Fonte     := aItens[nCount][3]
-            (cAliasTemp)->QTD_CHAM  := aItens[nCount][4]
-            (cAliasTemp)->TMP_TOTAL := aItens[nCount][5]
-            (cAliasTemp)->TMP_MAX   := aItens[nCount][6]
+        oTempTable := FWTemporaryTable():New()
+        oTempTable:SetFields(aCampos)
+        oTempTable:AddIndex("Bloco", {"BLOCO", "FUNCAO"})
+        oTempTable:Create()
 
-            (cAliasTemp)->(MSUnlock())
-        Endif
+        oTempDown := FwTemporaryTable():New()
+        oTempDown:SetFields(aCampos2)
+        oTempDown:AddIndex("Bloco", {"BLOCO_CHAM", "FUNCAO"})
+        oTempDown:Create()
+
+        cAliasTemp := oTempTable:GetAlias()
+        oBrowse := NIL
+
+        cAliasTmp2 := oTempDown:GetAlias()
+        oBrowseDown := NIL
+
+        DbSelectArea(cAliasTemp)
+
+        For nCount := 1 to 10
+            If (RecLock(cAliasTemp, .T.))
+                (cAliasTemp)->BLOCO     := aItens[nCount][1]
+                (cAliasTemp)->FUNCAO    := aItens[nCount][2]
+                (cAliasTemp)->FONTE     := aItens[nCount][3]
+                (cAliasTemp)->QTD_CHAM  := aItens[nCount][4]
+                (cAliasTemp)->TEMPO_CPU := Val(aItens[nCount][5])
+                (cAliasTemp)->MEM_ALOC  := Val(aItens[nCount][6])
+
+                (cAliasTemp)->(MSUnlock())
+            Endif
             (cAliasTemp)->(DbSkip())
-    Next nCount
+        Next nCount
 
-    (cAliasTemp)->(DbGoTop())
+        (cAliasTemp)->(DbGoTop())
 
-    oBrowse := FWMBrowse():New()
-    oBrowse:SetAlias(cAliasTemp)
-    oBrowse:SetColumns(aColunas)
-    oBrowse:SetDescription("LogProfiler Reader - AdvPL Ver.")
-    oBrowse:AddLegend("Substr(Funcao, 1, 2) == 'U_'", "RED", "Customizado")
-    oBrowse:AddLegend("Substr(Funcao, 1, 2) != 'U_'", "BLUE", "Padrão")
-    oBrowse:SetTemporary(.T.)
-    oBrowse:SetUseFilter(.T.)
-    oBrowse:OptionReport(.F.)
-    oBrowse:DisableDetails()
+        DbSelectArea(cAliasTmp2)
+        nCount := 1
+        While nCount <= 10
+            If (RecLock(cAliasTmp2, .T.))
+                (cAliasTmp2)->BLOCO_CHAM  := aItens2[nCount][1]
+                (cAliasTmp2)->FUNCAO      := aItens2[nCount][2]
+                (cAliasTmp2)->FONTE       := aItens2[nCount][3]
+                (cAliasTmp2)->LINHA       := aItens2[nCount][4]
+                (cAliasTmp2)->QTD_CHAM    := Val(aItens2[nCount][5])
+                (cAliasTmp2)->TEMPO_CPU   := Val(aItens2[nCount][6])
+                (cAliasTmp2)->MEM_ALOC    := Val(aItens2[nCount][7])
 
-    if lProtheus
+                (cAliasTmp2)->(MSUnlock())
+            Endif
+            (cAliasTmp2)->(DbSkip())
+            nCount ++
+        End do
+
+        oBrowse := FWMBrowse():New()
+        oBrowse:SetAlias(cAliasTemp)
+        oBrowse:AddLegend("Substr(FUNCAO, 1, 2) == 'U_'", "BLUE", "Customizado")
+        oBrowse:AddLegend("Substr(FUNCAO, 1, 2) != 'U_'", "GREEN", "Padrão")
+        oBrowse:SetColumns(aColunas)
+        oBrowse:SetOwner(oPanelUp)
+        oBrowse:SetDescription("Funções Chamadas (CALL):")
+        oBrowse:SetTemporary(.T.)
+        oBrowse:SetUseFilter(.T.)
+        oBrowse:OptionReport(.F.)
+        oBrowse:DisableDetails()
         oBrowse:Activate()
-    Else
-        oDlg := TDialog():New(0, 0, 800, 1750,,,,,,,,,,.T.)
-        oBrowse:Activate(oDlg)
-        oDlg:Activate()
-    Endif
+
+        oBrowseDown := FwMBrowse():New()
+        oBrowseDown:SetOwner(oPanelDown)
+        oBrowseDown:SetDescription("Funções Chamadoras (FROM):")
+        oBrowseDown:DisableDetails()
+        oBrowseDown:SetAlias(cAliasTmp2)
+        oBrowseDown:SetColumns(aColunas2)
+        oBrowseDown:SetTemporary(.T.)
+        oBrowseDown:SetCacheView(.F.)
+        oBrowseDown:Activate()
+
+        oRelation := FWBrwRelation():New()
+        oRelation:AddRelation(oBrowse, oBrowseDown, {{'BLOCO_CHAM', 'BLOCO'}}) 
+        oRelation:Activate()
+
+    ACTIVATE DIALOG oDlg CENTER
 
 Return
 
@@ -205,7 +279,7 @@ Static Function ParseCall(cLine)
     Local cRest       := AllTrim(SubStr(cLine, At(")", cLine) + 1))
     Local cContCall   := ""
     Local cTotTempo   := ""
-    Local cMaiorTempo := ""
+    Local cMemoria    := ""
     Local nPosC, nPosT, nPosM := 0
 
     If !Empty(cRest)
@@ -222,11 +296,12 @@ Static Function ParseCall(cLine)
         EndIf
 
         If nPosM > 0
-            cMaiorTempo := AllTrim(SubStr(cRest, nPosM + 1))
+            cMemoria := AllTrim(SubStr(cRest, nPosM + 1))
         EndIf
     EndIf
 
-Return {nBloco, "CALL", cFunc, cFonte, cRest, cContCall, cTotTempo, cMaiorTempo}
+    
+Return {nBloco, "CALL", cFunc, cFonte, cRest, cContCall, cTotTempo, cMemoria}
 
 Static Function ParseFrom(cLine)
 
@@ -236,7 +311,7 @@ Static Function ParseFrom(cLine)
     Local cRest       := ""
     Local cContCall   := ""
     Local cTotTempo   := ""
-    Local cMaiorTempo := ""
+    Local cMemoria    := ""
     Local nOpen       := Rat("(", cLine)
     Local nClose      := Rat(")", cLine)
     Local nPosC, nPosT, nPosM := 0
@@ -260,76 +335,64 @@ Static Function ParseFrom(cLine)
         EndIf
 
         If nPosM > 0
-            cMaiorTempo := AllTrim(SubStr(cRest, nPosM + 1))
+            cMemoria := AllTrim(SubStr(cRest, nPosM + 1))
         EndIf
     EndIf
-
-Return {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMaiorTempo}
+    
+Return {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMemoria}
 
 Static Function retColumns(cBlock, nType)
 
     Local aCampos  := {}
     Local aColunas := {}
+    Local nDec     := 3
 
     Do Case
-    Case Upper(cBlock) == "CALL"
+        Case Upper(cBlock) == "CALL"
 
-        // Codeblock: {|| BLOCO}
-        aAdd(aColunas, {"CALL_BLOCO", {|| BLOCO}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID1"})
-        aAdd(aCampos,  {"BLOCO", "N", 10, 0, "@E 9999999999"})
+            aAdd(aColunas, {"BLOCO", {|| BLOCO}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID1"})
+            aAdd(aCampos,  {"BLOCO", "N", 10, 0, "@E 9999999999"})
 
-        // Codeblock: {|| FUNCAO}
-        aAdd(aColunas, {"FUNCAO", {|| FUNCAO}, "C", "@!", 1, 20, 0, .F., {|| }, .F., {|| getHist()}, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID2"})
-        aAdd(aCampos,  {"FUNCAO", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"FUNCAO", {|| FUNCAO}, "C", "@!", 1, 25, 0, .F., {|| }, .F., {|| getHist()}, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID2"})
+            aAdd(aCampos,  {"FUNCAO", "C", 25, 0, "@!"})
 
-        // Codeblock: {|| FONTE}
-        aAdd(aColunas, {"FONTE", {|| FONTE}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID3"})
-        aAdd(aCampos,  {"FONTE", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"FONTE", {|| FONTE}, "C", "@!", 1, 25, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID3"})
+            aAdd(aCampos,  {"FONTE", "C", 25, 0, "@!"})
 
-        // Codeblock: {|| QTD_CHAM}
-        aAdd(aColunas, {"QTD_CHAM", {|| QTD_CHAM}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID4"})
-        aAdd(aCampos,  {"QTD_CHAM", "N", 10, 0, "@E 9999999999"})
+            aAdd(aColunas, {"QTD_CHAM", {|| QTD_CHAM}, "N", "@E 9999", 1, 6, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID4"})
+            aAdd(aCampos,  {"QTD_CHAM", "N", 6, 0, "@E 9999"})
 
-        // Codeblock: {|| TMP_TOTAL}
-        aAdd(aColunas, {"TMP_TOTAL", {|| TMP_TOTAL}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID5"})
-        aAdd(aCampos,  {"TMP_TOTAL", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"TEMPO_CPU", {|| TEMPO_CPU}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID5"})
+            aAdd(aCampos,  {"TEMPO_CPU", "N", 12, nDec, "@E 99999.999"})
 
-        // Codeblock: {|| TMP_MAX}
-        aAdd(aColunas, {"TMP_MAX", {|| TMP_MAX}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID6"})
-        aAdd(aCampos,  {"TMP_MAX", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"MEM_ALOC", {|| MEM_ALOC}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID6"})
+            aAdd(aCampos,  {"MEM_ALOC", "N", 12, nDec, "@E 99999.999"})
 
-    Case Upper(cBlock) == "FROM"
+        Case Upper(cBlock) == "FROM"
 
-        // Codeblock: {|| FROM_BLOC}
-        aAdd(aColunas, {"FROM_BLOC", {|| FROM_BLOC}, "C", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID1"})
-        aAdd(aCampos,  {"FROM_BLOC", "C", 10, 0, "@E 9999999999"})
+            aAdd(aColunas, {"BLOCO_CHAM", {|| BLOCO_CHAM}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID1"})
+            aAdd(aCampos,  {"BLOCO_CHAM", "N", 10, 0, "@E 9999999999"})
 
-        // Codeblock: {|| FUNCAO}
-        aAdd(aColunas, {"FUNCAO", {|| FUNCAO}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID2"})
-        aAdd(aCampos,  {"FUNCAO", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"FUNCAO", {|| FUNCAO}, "C", "@!", 1, 25, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID2"})
+            aAdd(aCampos,  {"FUNCAO", "C", 25, 0, "@!"})
 
-        // Codeblock: {|| FONTE}
-        aAdd(aColunas, {"FONTE", {|| FONTE}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID3"})
-        aAdd(aCampos,  {"FONTE", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"FONTE", {|| FONTE}, "C", "@!", 1, 25, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID3"})
+            aAdd(aCampos,  {"FONTE", "C", 25, 0, "@!"})
 
-        // Codeblock: {|| LINHA}
-        aAdd(aColunas, {"LINHA", {|| LINHA}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID4"})
-        aAdd(aCampos,  {"LINHA", "N", 10, 0, "@E 9999999999"})
+            aAdd(aColunas, {"LINHA", {|| LINHA}, "N", "@E 99999", 1, 8, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID4"})
+            aAdd(aCampos,  {"LINHA", "N", 8, 0, "@E 99999"})
 
-        // Codeblock: {|| QTDCHAM}
-        aAdd(aColunas, {"QTDCHAM", {|| QTDCHAM}, "C", "@!", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID5"})
-        aAdd(aCampos,  {"QTDCHAM", "C", 10, 0, "@!"})
+            aAdd(aColunas, {"QTD_CHAM", {|| QTD_CHAM}, "N", "@E 9999", 1, 6, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID5"})
+            aAdd(aCampos,  {"QTD_CHAM", "N", 6, 0, "@E 9999"})
 
-        // Codeblock: {|| TMP_TOT}
-        aAdd(aColunas, {"TMP_TOT", {|| TMP_TOT}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID6"})
-        aAdd(aCampos,  {"TMP_TOT", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"TEMPO_CPU", {|| TEMPO_CPU}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID6"})
+            aAdd(aCampos,  {"TEMPO_CPU", "N", 12, nDec, "@E 99999.999"})
 
-        // Codeblock: {|| TMP_MAX}
-        aAdd(aColunas, {"TMP_MAX", {|| TMP_MAX}, "C", "@!", 1, 20, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID7"})
-        aAdd(aCampos,  {"TMP_MAX", "C", 20, 0, "@!"})
+            aAdd(aColunas, {"MEM_ALOC", {|| MEM_ALOC}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID7"})
+            aAdd(aCampos,  {"MEM_ALOC", "N", 12, nDec, "@E 99999.999"})
 
-    Otherwise
-        Return {}
+        Otherwise
+            Return {}
     EndCase
 
     If nType == 1
@@ -339,18 +402,23 @@ Static Function retColumns(cBlock, nType)
     EndIf
 
 Return {}
+
 Static Function MenuDef()
 
     Local aRotina := {}
 
-    ADD OPTION aRotina TITLE "Fechar" ACTION "MsgInfo('Deu certo', 'Oba')" OPERATION 4 ACCESS 0
+    ADD OPTION aRotina TITLE "Abrir Arquivo" ACTION "U_PROFREAD" OPERATION 4 ACCESS 0
 
 Return aRotina
 
 Static Function getHist()
 
-    Local cFuncao := Upper(Alltrim((cAliasTemp)->Funcao))
+    Local cFuncao   := Upper(Alltrim((cAliasTemp)->FUNCAO))
+    Local nBloco    := (cAliasTemp)->BLOCO
+    Local cText     := ""
+    Local nCount    := 0
+    Local cTempo    := Transform((cAliasTemp)->TEMPO_CPU, "@E 99999.999")
+    Local cMemoria  := Transform((cAliasTemp)->MEM_ALOC, "@E 99999.999")
+    Local aItemFrom := {}
 
-    FwAlertInfo(cFuncao, "Atenção")
-
-Return
+Return 
