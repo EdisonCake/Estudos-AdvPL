@@ -14,8 +14,7 @@
 */
 User Function PROFREAD()
 
-    Local lProtheus := .F.
-
+    Private lProtheus := .F.
     Private cDir      := ""
     Private oFile     := Nil
     Private aCab      := {}
@@ -148,8 +147,6 @@ User Function ShowCont()
     Private oBrowse     as Object
     Private oDlg        as Object
     Private aRotina     := MenuDef()
-
-    oDlg := TDialog():New(0, 0, 600, 1750,,,,,,,,,,.T.)
     
     aCampos     := retColumns("CALL", 1)
     aColunas    := retColumns("CALL", 2)
@@ -190,8 +187,14 @@ User Function ShowCont()
     oBrowse:SetUseFilter(.T.)
     oBrowse:OptionReport(.F.)
     oBrowse:DisableDetails()
-    oBrowse:Activate(oDlg)
-    oDlg:Activate()
+
+    if lProtheus
+        oBrowse:Activate()
+    Else
+        oDlg := TDialog():New(0, 0, 800, 1750,,,,,,,,,,.T.)
+        oBrowse:Activate(oDlg)
+        oDlg:Activate()
+    Endif
 
 Return
 
