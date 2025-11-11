@@ -4,59 +4,69 @@
 #INCLUDE 'TOPCONN.CH'
 
 /*/{Protheus.doc} PROFREAD
+
     Rotina para leitura de arquivos de LOG do Protheus.
     Tradução do LogProfileViewer em Java.
 
     @type user function
     @author Edison Cake
-    @since 10/07/2025
-    @history  Primeiro estágio, criação da view para visualização dos arquivos.
+    @since 10.07.2025
+    
+    @history 13.10.2025 - Criado vínculo entre tabelas temporárias para exibição do grid.
 */
 User Function PROFREAD()
 
-    Local lProtheus := .F.
-
+    Private lProtheus := .F.
     Private cDir      := ""
     Private oFile     := Nil
     Private aCab      := {}
     Private aConteudo := {}
     Private aBloco    := {}
     Private nType     := 0
+    Private nBloco    := 0
+    Private aItens := {}
+    Private aItens2 := {}
 
     If Select("SX2") <= 0
-        PREPARE ENVIRONMENT EMPRESA '99' FILIAL '01'
-        FwAlertInfo("Empresa iniciada através de Prepare Environment")
+        PREPARE ENVIRONMENT EMPRESA '99' FILIAL '01' USER "Administrador" PASSWORD "123456"
     Else
         lProtheus := .T.
     EndIf
 
     If lProtheus
-        // TODO - Iniciar componentes gráficos MVC
+        MsgRun("Abrindo Arquivo...",    "Aguarde!",     {|| u_OPNFILE()})
+        MsgRun("Preenchendo View...",   "Aguarde!",     {|| U_ShowCont()})
     Else
         u_OPNFILE()
-        u_ShowCont()
+        u_blindView()
     EndIf
 
     If !Empty(oFile)
         oFile:Close()
     EndIf
-
-Return FwAlertInfo("Fim da Execução", "Fim!")
+Return 
 
 User Function OPNFILE()
 
     Local cDir      := cGetFile("*.txt", "Selecione o arquivo para leitura", 1, "", .T.)
-    Private nBloco  := 0
+    Local aReg      := {}
+    Local nLinha    := 0
+    Local nBlock    := 0
+
+    Local nPosBar   := 0
+    Local cFile     := ""
 
     If Empty(cDir)
         FwAlertInfo("Nenhum arquivo selecionado ou arquivo corrompido!")
         Return Nil
     EndIf
 
-    oFile := FwFileReader():New(cDir)
+    oFile   := FwFileReader():New(cDir)
+    nPosBar := rAt("\", cDir)
+    cFile   := SubStr(cDir, nPosBar+1, len(cDir))
 
     If oFile:Open()
-        FwAlertInfo("Leitura do arquivo " + cDir + ".", "Sucesso!")
+        FwAlertInfo("Leitura do arquivo " + upper(cFile) + ".", "Sucesso!")
         Do While oFile:HasLine()
             u_FileLine(oFile:GetLine())
         EndDo
@@ -68,6 +78,35 @@ User Function OPNFILE()
     Else
         MsgStop("Falha ao abrir o arquivo " + cDir + ".")
     EndIf
+
+    For nBlock := 1 To Len(aConteudo)
+        aBloco := aConteudo[nBlock]
+        For nLinha := 1 To Len(aBloco)
+            aReg := aBloco[nLinha]
+
+            If aReg[2] == "CALL"
+                //? Estrutura do ParseCall: {nBloco, "CALL", cFunc, cFonte, cRest, cContCall, cTotTempo, cMaiorTempo}
+                //* aAdd(aItens, {nBlock, Funcao, Fonte, QTD_CHAM, TEMPO_CPU, MEM_ALOC})
+                aAdd(aItens, {nBlock, aReg[3], aReg[4], Val(aReg[6]), aReg[7], aReg[8]})
+            
+            Elseif aReg[2] == "FROM"
+                //? Estrutura do ParseFrom: {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMaiorTempo}
+                //* aAdd(aItens2, {nBlock, Funcao, Fonte, Linha, QTD_CHAM, TEMPO_CPU, MEM_ALOC})
+                aAdd(aItens2, {nBlock, aReg[3], aReg[4], aReg[5], aReg[6], aReg[7], aReg[8]})
+                
+            EndIf
+        Next
+    Next
+
+Return
+
+User Function blindView()
+
+    Local oDialog := TDialog():New(000, 000, 100, 500, "Aguarde, preenchendo view...", /* Param */, /* Param */, /* Param */, /* Param */, CLR_BLACK, CLR_WHITE, /* Param */, , .T., /* Param */, /* Param */, /* Param */, 500, 100, .F.)
+
+    oDialog:Activate()
+
+    u_ShowCont()
 
 Return
 
@@ -110,151 +149,126 @@ Return
 
 User Function ShowCont()
 
-    Local oDlgPrinc
+    Local nCount        as Numeric
+    Local aColunas      as Array
+    Local aColunas2     as Array
+    Local aFiltro       as Array
+    Local cIdUp         as Character
+    Local cIdDown       as Character
 
-    Local oBrowseUp  
-    Local oPanelUp
-    Local oTemp1
-    Local cAlias1 := "TMP_CALL"
-    Local aItens    := {}
-    Local aColunas1  := {}
+    Private cAliasTemp  as Character
+    Private aCampos     as Array
+    Private oTempTable  as Object
+    Private oBrowse     as Object
+    Private oPanelUp    as Object
+    Private oDlg        as Object
+    Private oTela
+    Private aRotina     := MenuDef()
 
-    Local oBrowseDown 
-    Local oPanelDown
-    Local oTemp2
-    Local cAlias2   := "TMP_FROM"
-    Local aItens2   := {}
-    Local aColunas2  := {}
+    Private cAliasTmp2  as Character
+    Private aCampos2    as Array
+    Private oTempDown   as Object
+    Private oBrowseDown as Object
+    Private oPanelDown  as Object
 
-    Local oTela
-    Local oRelation
-    Local aRelation := {}
+    Private oRelation   as Object
+    Private aRelation   as Array
+    
+    aCampos     := retColumns("CALL", 1)
+    aColunas    := retColumns("CALL", 2)
+    aCampos2    := retColumns("FROM", 1)
+    aColunas2   := retColumns("FROM", 2)
+    aFiltro     := {}
 
-    Local cIdCall := ""
-    Local cIdFrom := ""
+    DEFINE MSDIALOG oDlg TITLE "LogProfiler Reader (AdvPL)" FROM 000, 000 TO 800, 1750 OF oMainWnd PIXEL
+        oTela   := FwFormContainer():New(oDlg)
+        cIdUp   := oTela:CreateHorizontalBox(50)
+        cIdDown := oTela:CreateHorizontalBox(50)
+        oTela:Activate(oDlg, .F.)
 
-    Local nBloco    := 0
-    Local nLinha    := 0
-    Local nCount    := 0
-    Local aBloco    := {}
-    Local aReg      := {}
+        oPanelUp    := oTela:Getpanel(cIdUp)
+        oPanelDown  := oTela:Getpanel(cIdDown)
 
-    // Percorre o array de conteúdo
-    For nBloco := 1 To Len(aConteudo)
-        aBloco := aConteudo[nBloco]
-        For nLinha := 1 To Len(aBloco)
-            aReg := aBloco[nLinha]
+        oTempTable := FWTemporaryTable():New()
+        oTempTable:SetFields(aCampos)
+        oTempTable:AddIndex("Bloco", {"BLOCO", "FUNCAO"})
+        oTempTable:Create()
 
-            // Apenas registros do tipo "CALL"
-            If aReg[2] == "CALL"
-                aAdd(aItens, {nBloco, aReg[3], aReg[4], Val(aReg[6]), aReg[7], aReg[8]})
+        oTempDown := FwTemporaryTable():New()
+        oTempDown:SetFields(aCampos2)
+        oTempDown:AddIndex("Bloco", {"BLOCO_CHAM", "FUNCAO"})
+        oTempDown:Create()
 
-            // Apenas registros do tipo "FROM"
-            Elseif aReg[2] == "FROM"
-                aAdd(aItens2, {nBloco, aReg[3], aReg[4], aReg[5], aReg[6], aReg[7], aReg[8]})
-                
-            EndIf
-        Next
-    Next
+        cAliasTemp := oTempTable:GetAlias()
+        oBrowse := NIL
 
-    // Criação das tabelas temporárias para popular com as informações
-    oTemp1 := FWTemporaryTable():New(cAlias1)
-    oTemp2 := FWTemporaryTable():New(cAlias2)
+        cAliasTmp2 := oTempDown:GetAlias()
+        oBrowseDown := NIL
 
-    aColunas1 := {}
-    aAdd(aColunas1, {"CALL_BLOCO",   "C", 10, 0})
-    aAdd(aColunas1, {"FUNCAO",  "C", 20, 0})
-    aAdd(aColunas1, {"FONTE",   "C", 20, 0})
-    aAdd(aColunas1, {"QTDCHAM", "N", 10, 0})
-    aAdd(aColunas1, {"TEMPTOT", "C", 20, 0})
-    aAdd(aColunas1, {"TEMPMAX", "C", 20, 0})
+        DbSelectArea(cAliasTemp)
 
-    aColunas2 := {}
-    aAdd(aColunas2, {"FROM_BLOCO",   "C", 10, 0})
-    aAdd(aColunas2, {"FUNCAO",  "C", 20, 0})
-    aAdd(aColunas2, {"FONTE",   "C", 20, 0})
-    aAdd(aColunas2, {"LINHA",   "N", 10, 0})
-    aAdd(aColunas2, {"QTDCHAM", "C", 10, 0})
-    aAdd(aColunas2, {"TEMPTOT", "C", 20, 0})
-    aAdd(aColunas2, {"TEMPMAX", "C", 20, 0})
+        For nCount := 1 to 10
+            If (RecLock(cAliasTemp, .T.))
+                (cAliasTemp)->BLOCO     := aItens[nCount][1]
+                (cAliasTemp)->FUNCAO    := aItens[nCount][2]
+                (cAliasTemp)->FONTE     := aItens[nCount][3]
+                (cAliasTemp)->QTD_CHAM  := aItens[nCount][4]
+                (cAliasTemp)->TEMPO_CPU := Val(aItens[nCount][5])
+                (cAliasTemp)->MEM_ALOC  := Val(aItens[nCount][6])
 
-    oTemp1:SetFields(aColunas1)
-    oTemp1:AddIndex("1", {"CALL_BLOCO"})
-    oTemp2:SetFields(aColunas2)
-    oTemp2:AddIndex("1", {"FROM_BLOCO"})
-    oTemp1:Create()
-    oTemp2:Create()
+                (cAliasTemp)->(MSUnlock())
+            Endif
+            (cAliasTemp)->(DbSkip())
+        Next nCount
 
-    dbSelectArea(cAlias1)
-    (cAlias1)->(dbGoTop())
-    For nCount := 1 to 10
+        (cAliasTemp)->(DbGoTop())
 
-        If Reclock(cAlias1, .T.)
+        DbSelectArea(cAliasTmp2)
+        nCount := 1
+        While nCount <= 10
+            If (RecLock(cAliasTmp2, .T.))
+                (cAliasTmp2)->BLOCO_CHAM  := aItens2[nCount][1]
+                (cAliasTmp2)->FUNCAO      := aItens2[nCount][2]
+                (cAliasTmp2)->FONTE       := aItens2[nCount][3]
+                (cAliasTmp2)->LINHA       := aItens2[nCount][4]
+                (cAliasTmp2)->QTD_CHAM    := Val(aItens2[nCount][5])
+                (cAliasTmp2)->TEMPO_CPU   := Val(aItens2[nCount][6])
+                (cAliasTmp2)->MEM_ALOC    := Val(aItens2[nCount][7])
 
-            (cAlias1)->CALL_BLOCO    := CVALTOCHAR(aItens[nCount][1])
-            (cAlias1)->FUNCAO   := aItens[nCount][2]
-            (cAlias1)->FONTE    := aItens[nCount][3]
-            (cAlias1)->QTDCHAM  := aItens[nCount][4]
-            (cAlias1)->TEMPTOT  := aItens[nCount][5]
-            (cAlias1)->TEMPMAX  := aItens[nCount][6]
-            (cAlias1)->(msUnlock())
+                (cAliasTmp2)->(MSUnlock())
+            Endif
+            (cAliasTmp2)->(DbSkip())
+            nCount ++
+        End do
 
-            (cAlias1)->(dbSkip())
-        Endif
-    Next nCount
+        oBrowse := FWMBrowse():New()
+        oBrowse:SetAlias(cAliasTemp)
+        oBrowse:AddLegend("Substr(FUNCAO, 1, 2) == 'U_'", "BLUE", "Customizado")
+        oBrowse:AddLegend("Substr(FUNCAO, 1, 2) != 'U_'", "GREEN", "Padrão")
+        oBrowse:SetColumns(aColunas)
+        oBrowse:SetOwner(oPanelUp)
+        oBrowse:SetDescription("Funções Chamadas (CALL):")
+        oBrowse:SetTemporary(.T.)
+        oBrowse:SetUseFilter(.T.)
+        oBrowse:OptionReport(.F.)
+        oBrowse:DisableDetails()
+        oBrowse:Activate()
 
-    dbSelectArea(cAlias2)
-    (cAlias2)->(dbGoTop())
-    For nCount := 1 to 10
-        If Reclock(cAlias2, .T.)
+        oBrowseDown := FwMBrowse():New()
+        oBrowseDown:SetOwner(oPanelDown)
+        oBrowseDown:SetDescription("Funções Chamadoras (FROM):")
+        oBrowseDown:DisableDetails()
+        oBrowseDown:SetAlias(cAliasTmp2)
+        oBrowseDown:SetColumns(aColunas2)
+        oBrowseDown:SetTemporary(.T.)
+        oBrowseDown:SetCacheView(.F.)
+        oBrowseDown:Activate()
 
-            (cAlias2)->FROM_BLOCO    := CVALTOCHAR(aItens2[nCount][1])
-            (cAlias2)->FUNCAO   := aItens2[nCount][2]
-            (cAlias2)->FONTE    := aItens2[nCount][3]
-            (cAlias2)->LINHA    := aItens2[nCount][4]
-            (cAlias2)->QTDCHAM  := aItens2[nCount][5]
-            (cAlias2)->TEMPTOT  := aItens2[nCount][6]
-            (cAlias2)->TEMPMAX  := aItens2[nCount][7]
-            (cAlias2)->(msUnlock())
+        oRelation := FWBrwRelation():New()
+        oRelation:AddRelation(oBrowse, oBrowseDown, {{'BLOCO_CHAM', 'BLOCO'}}) 
+        oRelation:Activate()
 
-            (cAlias2)->(dbSkip())
-        Endif
-    Next nCount
-
-    DEFINE MSDIALOG oDlgPrinc TITLE "LogProfiler Reader (ADVPL)" FROM 000, 000 TO 1920, 1080 OF oMainWnd PIXEL 
-
-    oTela := FwFormContainer():New(oDlgPrinc)
-    cIdCall := oTela:CreateHorizontalBox(40)
-    cIdFrom := oTela:CreateHorizontalBox(60)
-    oTela:Activate(oDlgPrinc, .F.)
-
-    oPanelUp    := oTela:GetPanel(cIdCall)
-    oPanelDown  := oTela:GetPanel(cIdFrom)
-
-    oBrowseUp := FWmBrowse():New()
-    oBrowseUp:SetOwner(oPanelUp)
-    oBrowseUp:SetDescription("Funções Chamadas")
-    oBrowseUp:SetAlias(cAlias1)
-    oBrowseUp:DisableDetails()
-    oBrowseUp:SetProfileID("1")
-    oBrowseUp:Activate()
-
-    oBrowseDown := FWmBrowse():New
-    oBrowseDown:SetOwner(oPanelDown)
-    oBrowseDown:SetDescription("Chamadores")
-    oBrowseDown:SetAlias(cAlias2)
-    oBrowseDown:DisableDetails()
-    oBrowseDown:SetProfileID("2")
-
-    oRelation := FWBrwRelation():New()
-    oRelation:AddRelation(oBrowseUp, oBrowseDown, {{'CALL_BLOCO', 'FROM_BLOCO'}})
-    oRelation:Activate()
-    oBrowseDown:Activate()
-
-    oBrowseUp:Refresh()
-    oBrowseDown:Refresh()
-
-    ACTIVATE MSDIALOG oDlgPrinc CENTER
+    ACTIVATE DIALOG oDlg CENTER
 
 Return
 
@@ -265,7 +279,7 @@ Static Function ParseCall(cLine)
     Local cRest       := AllTrim(SubStr(cLine, At(")", cLine) + 1))
     Local cContCall   := ""
     Local cTotTempo   := ""
-    Local cMaiorTempo := ""
+    Local cMemoria    := ""
     Local nPosC, nPosT, nPosM := 0
 
     If !Empty(cRest)
@@ -282,15 +296,13 @@ Static Function ParseCall(cLine)
         EndIf
 
         If nPosM > 0
-            cMaiorTempo := AllTrim(SubStr(cRest, nPosM + 1))
+            cMemoria := AllTrim(SubStr(cRest, nPosM + 1))
         EndIf
     EndIf
 
-Return {nBloco, "CALL", cFunc, cFonte, cRest, cContCall, cTotTempo, cMaiorTempo}
+    
+Return {nBloco, "CALL", cFunc, cFonte, cRest, cContCall, cTotTempo, cMemoria}
 
-/*/{Protheus.doc} ParseFrom
-    Processa linha do tipo FROM
-*/
 Static Function ParseFrom(cLine)
 
     Local cFunc       := AllTrim(SubStr(cLine, 8, At("(", cLine) - 8))
@@ -299,7 +311,7 @@ Static Function ParseFrom(cLine)
     Local cRest       := ""
     Local cContCall   := ""
     Local cTotTempo   := ""
-    Local cMaiorTempo := ""
+    Local cMemoria    := ""
     Local nOpen       := Rat("(", cLine)
     Local nClose      := Rat(")", cLine)
     Local nPosC, nPosT, nPosM := 0
@@ -323,8 +335,90 @@ Static Function ParseFrom(cLine)
         EndIf
 
         If nPosM > 0
-            cMaiorTempo := AllTrim(SubStr(cRest, nPosM + 1))
+            cMemoria := AllTrim(SubStr(cRest, nPosM + 1))
         EndIf
     EndIf
+    
+Return {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMemoria}
 
-Return {nBloco, "FROM", cFunc, cFonte, nLinha, cContCall, cTotTempo, cMaiorTempo}
+Static Function retColumns(cBlock, nType)
+
+    Local aCampos  := {}
+    Local aColunas := {}
+    Local nDec     := 3
+
+    Do Case
+        Case Upper(cBlock) == "CALL"
+
+            aAdd(aColunas, {"BLOCO", {|| BLOCO}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID1"})
+            aAdd(aCampos,  {"BLOCO", "N", 10, 0, "@E 9999999999"})
+
+            aAdd(aColunas, {"FUNCAO", {|| FUNCAO}, "C", "@!", 1, 25, 0, .F., {|| }, .F., {|| getHist()}, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID2"})
+            aAdd(aCampos,  {"FUNCAO", "C", 25, 0, "@!"})
+
+            aAdd(aColunas, {"FONTE", {|| FONTE}, "C", "@!", 1, 25, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID3"})
+            aAdd(aCampos,  {"FONTE", "C", 25, 0, "@!"})
+
+            aAdd(aColunas, {"QTD_CHAM", {|| QTD_CHAM}, "N", "@E 9999", 1, 6, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID4"})
+            aAdd(aCampos,  {"QTD_CHAM", "N", 6, 0, "@E 9999"})
+
+            aAdd(aColunas, {"TEMPO_CPU", {|| TEMPO_CPU}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID5"})
+            aAdd(aCampos,  {"TEMPO_CPU", "N", 12, nDec, "@E 99999.999"})
+
+            aAdd(aColunas, {"MEM_ALOC", {|| MEM_ALOC}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID6"})
+            aAdd(aCampos,  {"MEM_ALOC", "N", 12, nDec, "@E 99999.999"})
+
+        Case Upper(cBlock) == "FROM"
+
+            aAdd(aColunas, {"BLOCO_CHAM", {|| BLOCO_CHAM}, "N", "@E 9999999999", 1, 10, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID1"})
+            aAdd(aCampos,  {"BLOCO_CHAM", "N", 10, 0, "@E 9999999999"})
+
+            aAdd(aColunas, {"FUNCAO", {|| FUNCAO}, "C", "@!", 1, 25, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID2"})
+            aAdd(aCampos,  {"FUNCAO", "C", 25, 0, "@!"})
+
+            aAdd(aColunas, {"FONTE", {|| FONTE}, "C", "@!", 1, 25, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID3"})
+            aAdd(aCampos,  {"FONTE", "C", 25, 0, "@!"})
+
+            aAdd(aColunas, {"LINHA", {|| LINHA}, "N", "@E 99999", 1, 8, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID4"})
+            aAdd(aCampos,  {"LINHA", "N", 8, 0, "@E 99999"})
+
+            aAdd(aColunas, {"QTD_CHAM", {|| QTD_CHAM}, "N", "@E 9999", 1, 6, 0, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID5"})
+            aAdd(aCampos,  {"QTD_CHAM", "N", 6, 0, "@E 9999"})
+
+            aAdd(aColunas, {"TEMPO_CPU", {|| TEMPO_CPU}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID6"})
+            aAdd(aCampos,  {"TEMPO_CPU", "N", 12, nDec, "@E 99999.999"})
+
+            aAdd(aColunas, {"MEM_ALOC", {|| MEM_ALOC}, "N", "@E 99999.999", 1, 12, nDec, .F., {|| }, .F., Nil, "__ReadVar", {|| AlwaysTrue()}, .F., .F., {}, "ID7"})
+            aAdd(aCampos,  {"MEM_ALOC", "N", 12, nDec, "@E 99999.999"})
+
+        Otherwise
+            Return {}
+    EndCase
+
+    If nType == 1
+        Return aCampos
+    ElseIf nType == 2
+        Return aColunas
+    EndIf
+
+Return {}
+
+Static Function MenuDef()
+
+    Local aRotina := {}
+
+    ADD OPTION aRotina TITLE "Abrir Arquivo" ACTION "U_PROFREAD" OPERATION 4 ACCESS 0
+
+Return aRotina
+
+Static Function getHist()
+
+    Local cFuncao   := Upper(Alltrim((cAliasTemp)->FUNCAO))
+    Local nBloco    := (cAliasTemp)->BLOCO
+    Local cText     := ""
+    Local nCount    := 0
+    Local cTempo    := Transform((cAliasTemp)->TEMPO_CPU, "@E 99999.999")
+    Local cMemoria  := Transform((cAliasTemp)->MEM_ALOC, "@E 99999.999")
+    Local aItemFrom := {}
+
+Return 
